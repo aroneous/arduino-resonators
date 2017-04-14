@@ -107,22 +107,30 @@ void loop()
   if( collect_serial() )
   {
     // we have valid buffer of serial input
-    if( command[0] == 'e' || command[0] == 'E' )
-    {
+    switch (command[0]) {
+    case '*':
+        Serial.println("Magnus Resonators Node");
+    break;
+    case 'E':
+    case 'e':
       owner = enlightened;
       percent = getPercent(&command[1]);
-    }
-    else if( command[0] == 'r' || command[0] == 'R' )
-    {
+      break;
+    case 'R':
+    case 'r':
       owner = resistance;
       percent = getPercent(&command[1]);
-    }
-    else if( command[0] == 'n' || command[0] == 'N' )
-    {
+      break;
+    case 'n':
+    case 'N':
       owner = neutral;
       percent = 100;
-    }
+      break;
+    default:
+    Serial.println("?");
     //Serial.print((char *)command); Serial.print(" - ");Serial.print(command[0],DEC);Serial.print(": "); 
+    //Serial.print("owner "); Serial.print(owner,DEC); Serial.print(", percent "); Serial.println(percent,DEC); 
+  }    //Serial.print((char *)command); Serial.print(" - ");Serial.print(command[0],DEC);Serial.print(": "); 
     //Serial.print("owner "); Serial.print(owner,DEC); Serial.print(", percent "); Serial.println(percent,DEC); 
   }
 
