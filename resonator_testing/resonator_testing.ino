@@ -1,10 +1,43 @@
 #include <Adafruit_NeoPixel.h>
+
 #ifdef __AVR__
   #include <avr/power.h>
 #endif
 
-#define PIN 6
+#include <stdlib.h>
+#include <string.h>
 
+// first communication pin for neo pixel string
+#define BASE_PIN 2
+
+enum Direction { NORTH = 0, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST, NORTHWEST };
+enum Ownership {  neutral = 0, enlightened, resistance };
+
+// Parameter 1 = number of pixels in strip
+// Parameter 2 = Arduino pin number (most are valid)
+// Parameter 3 = pixel type flags, add together as needed:
+//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
+//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
+//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
+//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
+//   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
+
+#define NUM_OF_LEDS 120
+
+Adafruit_NeoPixel resonator[] = {
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 0, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 1, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 2, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 3, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 4, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 5, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 6, NEO_GRB + NEO_KHZ800),
+  Adafruit_NeoPixel(NUM_OF_LEDS, BASE_PIN + 7, NEO_GRB + NEO_KHZ800),
+};
+
+
+
+#define L0 0x000000
 #define L1 0xEE8800
 #define L2 0xFF6600
 #define L3 0xCC3300
@@ -16,6 +49,7 @@
 #define GREEN 0x00FF00
 #define BLUE  0x0000FF
 
+#define L0D 0x000000
 #define L1D 0x332200
 #define L2D 0x441500
 #define L3D 0x240800
@@ -27,124 +61,137 @@
 #define GREEND 0x001500
 #define BLUED  0x000015
 
-// Parameter 1 = number of pixels in strip
-// Parameter 2 = Arduino pin number (most are valid)
-// Parameter 3 = pixel type flags, add together as needed:
+uint8_t dir;
+uint8_t percent;
+uint8_t owner;    // 0=neutral, 1=enl, 2=res
+static int16_t resonatorLocation[8] = { 48,48,48,48,48,48,48,48 }; // ascii zero
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(240, PIN, NEO_GRB + NEO_KHZ800);
-
+// Serial I/O
+const int ioSize = 64;
+int8_t command[ioSize];
+int8_t in_index = 0;
 
 
 void setup() {
+  uint8_t i;
+  start_serial();
 
-  strip.begin();
-  strip.show(); // Initialize all pixels to 'off'
-}
-
-void loop() {
-  resonatorDeployed(GREEN, L1);
-  resonatorPulsing(GREEN, L1);
-  resonatorPulsing(GREEN, L2);
-  resonatorPulsing(GREEN, L3);
-  resonatorPulsing(GREEN, L4);
-  resonatorPulsing(GREEN, L5);
-  resonatorPulsing(GREEN, L6);
-  resonatorPulsing(GREEN, L7);
-  resonatorPulsing(GREEN, L8);
-  resonatorDeployed(BLUE, L8);
-  resonatorPulsing(BLUE, L8);
-  resonatorPulsing(BLUE, L7);
-  resonatorPulsing(BLUE, L6);
-  resonatorPulsing(BLUE, L5);
-  resonatorPulsing(BLUE, L4);
-  resonatorPulsing(BLUE, L3);
-  resonatorPulsing(BLUE, L2);
-  resonatorPulsing(BLUE, L1);
-}
-
-// Fill the dots one after the other with a color
-void resonatorDeployed(uint32_t c, uint32_t resonatorLevel) {
-  for(uint16_t i=120; i>0; i--) {
-    strip.setPixelColor(i, 0);
-    strip.show();   
-  }
-  delay(2000);
-  for(uint16_t i=120; i>12; i--) {
-    strip.setPixelColor(i, resonatorLevel);
-    strip.show();
-    delay(5);
-  }
-    for(uint16_t i=12; i>0; i--) {
-    strip.setPixelColor(i, c);
-    strip.show();
-    delay(5);
+  dir = NORTH; // begin on the north resonator
+  owner = neutral;
+  percent = 0;
+    
+  for(i=0; i<8; i++) {
+    resonator[i].begin();
+    resonator[i].show(); // Initialize all pixels to 'off'
   }
 }
 
 
-//Theatre-style crawling lights.
-void resonatorPulsing(uint32_t c, uint32_t resonatorLevel) {
-  uint32_t df;
-  uint32_t cd;
-  uint8_t pulsewait = 250;
-    for (int q=3; q > 0; q--) {
-      for (uint16_t i=0; i < 12; i=i+3) {
-        strip.setPixelColor(i+q, c);    //turn every third pixel on
-        strip.setPixelColor(i+q+12, resonatorLevel);
-        strip.setPixelColor(i+q+24, resonatorLevel);
-        strip.setPixelColor(i+q+36, resonatorLevel);
-        strip.setPixelColor(i+q+48, resonatorLevel);
-        strip.setPixelColor(i+q+60, resonatorLevel);
-        strip.setPixelColor(i+q+72, resonatorLevel);
-        strip.setPixelColor(i+q+84, resonatorLevel);
-        strip.setPixelColor(i+q+96, resonatorLevel);
-        strip.setPixelColor(i+q+108, resonatorLevel);
-      }
-      strip.show();
+void start_serial(void) {
+  in_index = 0;
+  Serial.begin(115200);
+}
 
-      delay(pulsewait);
 
-      for (uint16_t i=0; i < 12; i=i+3) {
-        switch (resonatorLevel) {
-          case L1 : df = L1D;
-            break;
-          case L2 : df = L2D;
-            break;
-          case L3 : df = L3D;
-            break;
-          case L4 : df = L4D;
-            break;
-          case L5 : df = L5D;
-            break;
-          case L6 : df = L6D;
-            break;
-          case L7 : df = L7D;
-            break;
-          case L8 : df = L8D;
-            break;
-          default: df = 0;
-            break;
+void loop()
+{
+  uint16_t i, val;
+  uint32_t ownerColor;
+
+  update_status();
+  pulse_animation();
+}
+
+
+bool collect_serial(void) {
+  while ( Serial.available() > 0 ) {
+    int8_t ch = Serial.read();
+    if (ch == '\n') {
+      command[in_index] = 0; // terminate
+      if (in_index > 0) {
+        in_index = 0;
+        return true;
       }
-      switch (c) {
-        case GREEN : cd = GREEND;
-          break;
-        case BLUE : cd = BLUED;
-          break;
-        default: cd = 0;
-          break;
+    } else if (ch == 0x0a || ch == 0x13) { 
+      // carriage return or linefeed (ignore
+    } else {
+      command[in_index] = ch;
+      if (in_index < (sizeof(command) / sizeof(command[0])) - 2) {
+        in_index++;
       }
-        strip.setPixelColor(i+q, cd);
-        strip.setPixelColor(i+q+12, df);
-        strip.setPixelColor(i+q+24, df);
-        strip.setPixelColor(i+q+36, df);
-        strip.setPixelColor(i+q+48, df);
-        strip.setPixelColor(i+q+60, df);
-        strip.setPixelColor(i+q+72, df);
-        strip.setPixelColor(i+q+84, df);
-        strip.setPixelColor(i+q+96, df);
-        strip.setPixelColor(i+q+108, df);
-      }
+      //  in_index = 0;
+    }
+  }
+  return false;
+}
+
+
+// This function parses the serial command and sets the owner and 
+// resonator levels accordingly
+void update_status() {
+  int16_t level;
+    if (collect_serial()) {
+    // we have valid buffer of serial input
+    switch (command[0]) {
+      case '*':
+        Serial.println("Magnus Resonators Node");
+        break;
+      case 'E':
+      case 'e':
+        if (owner != enlightened) {
+          owner = enlightened;
+          change_owner();
+        }
+        break;
+      case 'R':
+      case 'r':
+        if (owner != resistance) {
+          owner = resistance;
+          change_owner();
+        }
+        owner = resistance;
+        break;
+      case 'n':
+      case 'N':
+        if (owner != neutral) {
+          owner = neutral;
+          change_owner();
+        }
+        break;
+      default:
+        break;
+    }
+    for (int i = 0; i < 8; i++) {
+      level = command[i+1]; 
+      if (resonatorLocation[i] != level) { // if resonator is not same as previous deploy new
+        resonatorLocation[i] = level; 
+        deploy_resonator(i);
+      }  
+    }
   }
 }
 
 
+// This function will play an animation of a resonator being deployed at "location" 
+void deploy_resonator(uint16_t location) {
+  Serial.print("ResonatorDeployed...");
+  Serial.print(location);
+  Serial.write('-');
+  Serial.write(resonatorLocation[location]);
+  Serial.println();
+}
+
+// This function will play a pulsing animation for all 8 locations
+// This fuction will run every cycle, so keep track on the index to play next frame
+void pulse_animation() {
+ 
+  // Do magic stuff here  
+}
+
+// This function will play an animation for ownership change or portal being nuetralized
+void change_owner() {
+  Serial.print("Owner Changed...");
+  Serial.print(owner);
+  Serial.println();  
+  // Do magic stuff here
+}
