@@ -133,7 +133,7 @@ void loop()
         switch (cmd) {
             Color c;
             case '*':
-                Serial.println("Magnus Core Node");
+                Serial.println("Magnus Resonators Node");
                 break;
             case 'E':
             case 'e':
