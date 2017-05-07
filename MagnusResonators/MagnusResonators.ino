@@ -124,9 +124,15 @@ void loop()
         
         for (int i = 0; i < 8; i++) {
           int level = command[i+1]; 
-          if (resonatorLevel[i] != level) { // if resonator is not same as previous deploy new
+          if ((resonatorLevel[i] == 0) and (level != '0')) {
+            Serial.println("Deploy Resonator - case 1");
+          }
+          if ((resonatorLevel[i] !=0) and (level == '0')) {
+            Serial.println("Destroy Resonator - case 2");
+          }
+          
+          if (resonatorLevel[i] != level - '0') { // if resonator is not same as previous then update it
             resonatorLevel[i] = level - '0'; 
-            // deploy_resonator(i); add animation for this
           }  
         }
         
@@ -136,8 +142,8 @@ void loop()
                 Serial.println("Magnus Resonators Node");
                 break;
             case 'E':
-            case 'e':
             case 'R':
+            case 'e':
             case 'r':
                 owner = (cmd & CASE_MASK) == 'E' ? enlightened : resistance;
                 percent = getPercent(&command[1]);
@@ -156,7 +162,6 @@ void loop()
                 break;
 
             case 'N':
-            //case 'n':
                 owner = neutral;
                 percent = 20;
                 if (RGBW_SUPPORT) {
@@ -171,7 +176,23 @@ void loop()
                     animations.redFlash.init(states[i][stateIdx], strip, RGBW_SUPPORT);
                     animationQueue.add(&animations.solid);
                     stateIdx = animationQueue.lastIdx();
-                    animations.solid.init(states[i][stateIdx], strip, c);
+                }
+                break;
+                
+            case 'n':
+                owner = neutral;
+                percent = 20;
+                if (RGBW_SUPPORT) {
+                    c = ToColor(0x00, 0x00, 0x00, 0xff);
+                } else {
+                    c = ToColor(0xff, 0xff, 0xff);
+                }
+                for (int i = 0; i < NUM_STRINGS; i++) {
+                    QueueType& animationQueue = animationQueues[i];
+                    animationQueue.setTo(&animations.movingPulse);
+                    unsigned int stateIdx = animationQueue.lastIdx();
+                    double initialPhase = ((double) i) / NUM_STRINGS;
+                    animations.movingPulse.init(states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
                 }
                 break;
 
