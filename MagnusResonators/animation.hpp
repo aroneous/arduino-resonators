@@ -83,6 +83,14 @@ struct CommonState {
     unsigned long duration; // ms
 };
 
+struct DeployResonatorState : public CommonState {
+    int32_t color;
+    int32_t ownerColor;
+    uint16_t pulseLength;
+    int level;
+    float pixelsPerMs;
+};
+
 struct MovingPulseState : public CommonState {
     int32_t color;
     int32_t colorDim;
@@ -108,6 +116,7 @@ struct SolidColorState : public CommonState {
 union AnimationState {
     CommonState      common;
     MovingPulseState movingPulse;
+    DeployResonatorState  deployResonator;
     PulseState       pulse;
     RedFlashState    redFlash;
     SolidColorState  solid;
@@ -139,6 +148,65 @@ class Animation {
 };
 
 // Animation implemntations
+
+// A pulse of light that moves down the strip of pixels
+class DeployResonator : public Animation {
+    public:
+        // Initialize state to animation start point
+        void init(AnimationState& state, Adafruit_NeoPixel& strip, int resonatorLevel, Ownership owner) {
+            commonInit(state, strip);
+            DeployResonatorState& s = state.deployResonator;
+            s.duration = AnimationDuration;
+            s.color = resonatorColor[resonatorLevel];
+            s.level = resonatorLevel;
+            s.ownerColor = ownerColor[owner];
+            s.pulseLength = s.numPixels / PulseDivisor;
+            s.pixelsPerMs = (float) s.numPixels / AnimationDuration;
+        }
+
+        // Draw a new frame of the animation
+        virtual void doFrame(AnimationState& state, Adafruit_NeoPixel& strip) override {
+            MovingPulseState& s = state.movingPulse;
+
+            unsigned long phase = (millis() - s.startTime) % AnimationDuration; // In ms
+            uint16_t startPixel = phase * s.pixelsPerMs;
+            for (uint16_t i = 0; i < s.numPixels; i++) {
+                if (i >= startPixel && i < startPixel + s.pulseLength) {
+                  if (i > s.numPixels - 12) {  
+                    if (s.color == 0) {
+                      strip.setPixelColor(s.numPixels - i, s.color);                    
+                    } else {
+                      strip.setPixelColor(s.numPixels - i, s.ownerColor);
+                    }
+                  } else {
+                    strip.setPixelColor(s.numPixels - i, s.color);
+                  }
+                } else {
+                  if (i > s.numPixels - 12) {  
+                    if (s.color == 0) {
+                      strip.setPixelColor(s.numPixels - i, s.color);                    
+                    } else {                    
+                      strip.setPixelColor(s.numPixels - i, 0);
+                    }
+                  } else {
+                    strip.setPixelColor(s.numPixels - i, 0);
+                  }
+                }
+            }
+            strip.show();
+        }
+
+        /*
+        virtual uint32_t cyclesComplete(const AnimationState& state) const override {
+            return (millis() - state.movingPulse.startTime) / AnimationDuration;
+        }
+        */
+
+    private:
+        static const unsigned long AnimationDuration = 4000l; // ms
+        static const uint16_t PulseDivisor = 8; // 1/PulseDivisor defines the size of the pulse
+};
+
 
 // A pulse of light that moves down the strip of pixels
 class MovingPulse : public Animation {
@@ -349,6 +417,7 @@ class SolidColor : public Animation {
 // Collection of all supported animations
 struct Animations {
     MovingPulse movingPulse;
+    DeployResonator deployResonator;
     Pulse pulse;
     RedFlash redFlash;
     SolidColor solid;
