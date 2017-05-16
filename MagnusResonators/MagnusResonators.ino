@@ -10,7 +10,6 @@
 const unsigned int BASE_PIN = 2;
 
 const unsigned int NUM_STRINGS = 8;
-//#define NUM_STRINGS 8 // one for each resonator
 
 const uint16_t LEDS_PER_STRAND = 50; // 120
 const bool RGBW_SUPPORT = false; // true
@@ -19,9 +18,47 @@ const unsigned int QUEUE_SIZE = 3;
 // Mask to clear 'upper case' ASCII bit
 const char CASE_MASK = ~0x20;
 
+const unsigned long LED_UPDATE_PERIOD = 5; // in ms. Time between drawing a frame on _any_ LED strip.
+
+//const long BAUD_RATE = 115200;
+const long BAUD_RATE = 9600;
+
+// Command format:
+// Fnnnnnnnnp12345678mmmm\n
+// F = faction: EeRrNn. Capitalized on state change; lowercase if same as before
+// n = resonator level
+// p = portal health percentage
+// 1-8 = resonator health percentage
+// m = mod status
+//
+// percentage health encoded as single character. Space (' ') is 0%, and then each ASCII character
+// above it is 2% greater, up to 'R' for 100%
+//
+// Mods:
+// ' ' - No mod present in this slot
+// '0' - FA Force Amp
+// '1' - HS-C Heat Shield, Common
+// '2' - HS-R Heat Shield, Rare
+// '3' - HS-VR Heat Shield, Very Rare
+// '4' - LA-R Link Amplifier, Rare
+// '5' - LA-VR Link Amplifier, Very Rare
+// '6' - SBUL SoftBank Ultra Link
+// '7' - MH-C MultiHack, Common
+// '8' - MH-R MultiHack, Rare
+// '9' - MH-VR MultiHack, Very Rare
+// 'A' - PS-C Portal Shield, Common
+// 'B' - PS-R Portal Shield, Rare
+// 'C' - PS-VR Portal Sheild, Very Rare
+// 'D' - AXA AXS Shield
+// 'E' - T Turret
+
+const unsigned int COMMAND_LENGTH = 22;
+const unsigned int PORTAL_STRENGTH_INDEX = 9;
+
 enum Direction { NORTH = 0, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST, NORTHWEST };
 //enum Ownership {  neutral = 0, enlightened, resistance };
 static int16_t resonatorLevel[8] = { 8,8,8,8,8,8,8,8 };
+enum SerialStatus { IDLE, IN_PROGRESS, COMMAND_COMPLETE };
 
 // Static animation implementations singleton
 Animations animations;
@@ -48,43 +85,49 @@ const int ioSize = 64;
 char command[32];
 int8_t in_index = 0;
 
+unsigned long nextUpdate;
+
 void start_serial(void)
 {
   in_index = 0;
-  Serial.begin(115200);
+  Serial.begin(BAUD_RATE);
 }
 
-bool collect_serial(void)
+SerialStatus collect_serial(void)
 {
-  while ( Serial.available() > 0 )
-  {
-    int8_t ch = Serial.read();
-    if ( ch == '\n' )
+    SerialStatus status = in_index == 0 ? IDLE : IN_PROGRESS;
+    int avail = Serial.available();
+    while (Serial.available() > 0)
     {
-      command[in_index] = 0; // terminate
-      if ( in_index > 0 )
-      {
-        in_index = 0;
-        return true;
-      }
+        int8_t ch = Serial.read();
+        if ( ch == '\n' )
+        {
+            command[in_index] = 0; // terminate
+            if ( in_index > 0 )
+            {
+                in_index = 0;
+                return COMMAND_COMPLETE;
+            }
+        }
+        else if (ch != '\r') // ignore CR
+        {
+            command[in_index] = ch;
+            if ( in_index < (sizeof(command)/sizeof(command[0])) - 2 ) {
+                in_index++;
+            }
+        }
     }
-    else if (ch != '\r') // ignore CR
-    {
-      command[in_index] = ch;
-      if ( in_index < (sizeof(command)/sizeof(command[0])) - 2 ) {
-        in_index++;
-      }
-      //if( in_index >= 32 ) //sizeof(command) )
-      //  in_index = 0;
-    }
-  }
-  return false;
+    return status;
 }
 
 uint8_t getPercent(const char *buffer)
 {
   unsigned long inVal = strtoul(buffer, NULL, 10);
   return uint8_t( constrain(inVal, 0, 100) );
+}
+
+unsigned int decodePercent(const char encoded) {
+    return (encoded - ' ') * 2;
 }
 
 uint8_t dir;
@@ -105,19 +148,20 @@ void setup()
   }
 
   dir = 0;
-  owner = neutral;
+  //owner = neutral;
+  owner = initial;
   percent = 0;
+  nextUpdate = millis();
 }
 
 // the loop function runs over and over again forever
 void loop()
 {
     uint16_t i, val;
-    // Voodoo magic - timing is slow without a delay thrown in
-    // I think writing the LEDs disables interrupts which affects incremneting of time
-    delay(10);
+    unsigned long now = millis();
 
-    if( collect_serial() )
+    SerialStatus status = collect_serial();
+    if (status == COMMAND_COMPLETE)
     {
         // we have valid buffer of serial input
         char cmd = command[0];
@@ -157,7 +201,7 @@ void loop()
                     animationQueue.setTo(&animations.movingPulse);
                     unsigned int stateIdx = animationQueue.lastIdx();
                     double initialPhase = ((double) i) / NUM_STRINGS;
-                    animations.movingPulse.init(states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
+                    animations.movingPulse.init(now, states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
                 }
                 break;
 
@@ -173,7 +217,7 @@ void loop()
                     QueueType& animationQueue = animationQueues[i];
                     animationQueue.setTo(&animations.redFlash);
                     unsigned int stateIdx = animationQueue.lastIdx();
-                    animations.redFlash.init(states[i][stateIdx], strip, RGBW_SUPPORT);
+                    animations.redFlash.init(now, states[i][stateIdx], strip, RGBW_SUPPORT);
                     animationQueue.add(&animations.solid);
                     stateIdx = animationQueue.lastIdx();
                 }
@@ -192,7 +236,7 @@ void loop()
                     animationQueue.setTo(&animations.movingPulse);
                     unsigned int stateIdx = animationQueue.lastIdx();
                     double initialPhase = ((double) i) / NUM_STRINGS;
-                    animations.movingPulse.init(states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
+                    animations.movingPulse.init(now, states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
                 }
                 break;
 
@@ -204,25 +248,30 @@ void loop()
         Serial.print("owner "); Serial.print(owner,DEC); Serial.print(", percent "); Serial.println(percent,DEC); 
     }
 
-    strip.setPin(dir + BASE_PIN);  // pick the string
+    // If we're in the process of getting a serial command, don't service the LEDs: this process disables interrupts,
+    // which can cause us to miss characters
+    if (status == IDLE && now >= nextUpdate) {
+        nextUpdate = now + LED_UPDATE_PERIOD;
 
-    QueueType& animationQueue = animationQueues[dir];
-    unsigned int queueSize = animationQueue.size();
-    if (queueSize > 1) {
-        if (animationQueue.peek()->done(states[dir][animationQueue.currIdx()])) {
-            animationQueue.remove();
-            queueSize--;
-            animationQueue.peek()->start(states[dir][animationQueue.currIdx()]);
+        strip.setPin(dir + BASE_PIN);  // pick the string
+
+        QueueType& animationQueue = animationQueues[dir];
+        unsigned int queueSize = animationQueue.size();
+        if (queueSize > 1) {
+            if (animationQueue.peek()->done(now, states[dir][animationQueue.currIdx()])) {
+                animationQueue.remove();
+                queueSize--;
+                animationQueue.peek()->start(now, states[dir][animationQueue.currIdx()]);
+            }
         }
-    }
-    if (queueSize > 0) {
-        //strip.setBrightness(255);
-        strip.setBrightness((uint8_t)((uint16_t)(255*(percent/100.0))));
-        //pCurrAnimation->doFrame(states[0], strip);
-        animationQueue.peek()->doFrame(states[dir][animationQueue.currIdx()], strip);
-    }
+        if (queueSize > 0) {
+            //strip.setBrightness(255);
+            strip.setBrightness((uint8_t)((uint16_t)(255*(percent/100.0))));
+            //pCurrAnimation->doFrame(states[0], strip);
+            animationQueue.peek()->doFrame(now, states[dir][animationQueue.currIdx()], strip);
+        }
 
-    // Update one strand each time through the loop
-    dir = (dir + 1) % NUM_STRINGS;
+        // Update one strand each time through the loop
+        dir = (dir + 1) % NUM_STRINGS;
+    }
 }
-
