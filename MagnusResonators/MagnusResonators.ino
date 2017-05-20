@@ -11,7 +11,7 @@ const unsigned int BASE_PIN = 2;
 
 const unsigned int NUM_STRINGS = 8;
 
-const uint16_t LEDS_PER_STRAND = 50; // 120
+const uint16_t LEDS_PER_STRAND = 120; // 120
 const bool RGBW_SUPPORT = false; // true
 const unsigned int QUEUE_SIZE = 3;
 
@@ -58,6 +58,7 @@ const unsigned int PORTAL_STRENGTH_INDEX = 9;
 enum Direction { NORTH = 0, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST, NORTHWEST };
 //enum Ownership {  neutral = 0, enlightened, resistance };
 static int16_t resonatorLevel[8] = { 8,8,8,8,8,8,8,8 };
+static int16_t newResonatorLevel[8] = { 8,8,8,8,8,8,8,8 };
 enum SerialStatus { IDLE, IN_PROGRESS, COMMAND_COMPLETE };
 
 // Static animation implementations singleton
@@ -109,7 +110,7 @@ SerialStatus collect_serial(void)
                 return COMMAND_COMPLETE;
             }
         }
-        else if (ch != '\r') // ignore CR
+        else if (ch != '\r' && ch != '.') // ignore CR
         {
             command[in_index] = ch;
             if ( in_index < (sizeof(command)/sizeof(command[0])) - 2 ) {
@@ -175,9 +176,7 @@ void loop()
             Serial.println("Destroy Resonator - case 2");
           }
           
-          if (resonatorLevel[i] != level - '0') { // if resonator is not same as previous then update it
-            resonatorLevel[i] = level - '0'; 
-          }  
+          newResonatorLevel[i] = level - '0'; 
         }
         
         switch (cmd) {
@@ -197,33 +196,45 @@ void loop()
                         owner == resistance ? 0xff : 0x00,
                         0x00);
                 for (int i = 0; i < NUM_STRINGS; i++) {
-                    QueueType& animationQueue = animationQueues[i];
-                    animationQueue.setTo(&animations.movingPulse);
-                    unsigned int stateIdx = animationQueue.lastIdx();
-                    double initialPhase = ((double) i) / NUM_STRINGS;
-                    animations.movingPulse.init(now, states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
+                    if (resonatorLevel[i] != newResonatorLevel[i]) {
+                        resonatorLevel[i] = newResonatorLevel[i];
+                        QueueType& animationQueue = animationQueues[i];
+                        animationQueue.setTo(&animations.movingPulse);
+                        unsigned int stateIdx = animationQueue.lastIdx();
+                        double initialPhase = ((double) i) / NUM_STRINGS;
+                        animations.movingPulse.init(now, states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
+                    }
                 }
                 break;
 
             case 'N':
+            case 'n':
                 owner = neutral;
                 percent = 20;
+                /*
                 if (RGBW_SUPPORT) {
                     c = ToColor(0x00, 0x00, 0x00, 0xff);
                 } else {
                     c = ToColor(0xff, 0xff, 0xff);
                 }
+                */
+                c = ToColor(0x00);
                 for (int i = 0; i < NUM_STRINGS; i++) {
                     QueueType& animationQueue = animationQueues[i];
+                    /*
                     animationQueue.setTo(&animations.redFlash);
                     unsigned int stateIdx = animationQueue.lastIdx();
                     animations.redFlash.init(now, states[i][stateIdx], strip, RGBW_SUPPORT);
                     animationQueue.add(&animations.solid);
-                    stateIdx = animationQueue.lastIdx();
+                    */
+
+                    animationQueue.setTo(&animations.solid);
+                    unsigned int stateIdx = animationQueue.lastIdx();
+                    animations.solid.init(now, states[i][stateIdx], strip, c);
                 }
                 break;
                 
-            case 'n':
+                /*
                 owner = neutral;
                 percent = 20;
                 if (RGBW_SUPPORT) {
@@ -239,6 +250,7 @@ void loop()
                     animations.movingPulse.init(now, states[i][stateIdx], strip, resonatorLevel[i], owner); //, initialPhase);
                 }
                 break;
+                */
 
             default:
                 Serial.print("Unkwown command "); Serial.println(cmd);
