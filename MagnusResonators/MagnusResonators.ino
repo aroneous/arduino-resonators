@@ -57,8 +57,8 @@ const unsigned int PORTAL_STRENGTH_INDEX = 9;
 
 enum Direction { NORTH = 0, NORTHEAST, EAST, SOUTHEAST, SOUTH, SOUTHWEST, WEST, NORTHWEST };
 //enum Ownership {  neutral = 0, enlightened, resistance };
-static int16_t resonatorLevel[8] = { 8,8,8,8,8,8,8,8 };
-static int16_t newResonatorLevel[8] = { 8,8,8,8,8,8,8,8 };
+static int16_t resonatorLevel[8] = { 0,0,0,0,0,0,0,0 };
+static int16_t newResonatorLevel[8] = { 0,0,0,0,0,0,0,0 };
 enum SerialStatus { IDLE, IN_PROGRESS, COMMAND_COMPLETE };
 
 // Static animation implementations singleton
